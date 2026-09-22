@@ -76,14 +76,25 @@ async function synchronize() {
     busy = false; $('sync').disabled = !accessToken;
   }
 }
+async function accountFromToken(token) {
+  const options = { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) };
+  const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', options);
+  if (response.ok) {
+    const user = await response.json();
+    if (user.sub) return { subject: user.sub, email: user.email || '' };
+  }
+  const about = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(permissionId,emailAddress)', options);
+  if (about.ok) {
+    const user = (await about.json()).user || {};
+    if (user.permissionId) return { subject: 'drive:' + user.permissionId, email: user.emailAddress || '' };
+  }
+  throw new Error('로그인 계정을 확인하지 못했습니다. Google 계정 권한을 다시 연결하세요.');
+}
 async function completeLogin(authRun, token, expiresIn) {
-  const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error('로그인 계정을 확인하지 못했습니다.');
-  const user = await response.json();
+  const user = await accountFromToken(token);
   if (authRun !== generation) return;
-  if (!user.sub) throw new Error('계정 식별 정보가 없습니다.');
-  if (subject && subject !== user.sub) throw new Error('다른 계정으로 바꾸려면 먼저 로그아웃하세요. 작성 내용이 섞이지 않도록 연결을 중단했습니다.');
-  subject = user.sub; email = user.email || ''; accessToken = token; expires = Date.now() + (Number(expiresIn || 3600) - 60) * 1000;
+  if (subject && subject !== user.subject) throw new Error('다른 계정으로 바꾸려면 먼저 로그아웃하세요. 작성 내용이 섞이지 않도록 연결을 중단했습니다.');
+  subject = user.subject; email = user.email; accessToken = token; expires = Date.now() + (Number(expiresIn || 3600) - 60) * 1000;
   $('account').textContent = email; $('logout').hidden = false; $('login').textContent = '구글 계정 다시 연결';
   await synchronize();
 }
@@ -100,7 +111,7 @@ $('login').onclick = async () => {
   if (!MOBILE_CONFIG.clientId) { message('웹용 구글 로그인 설정이 아직 없습니다. mobile/config.js의 clientId를 설정하세요.'); return; }
   if (!window.google?.accounts?.oauth2) { message('구글 로그인 화면을 불러오지 못했습니다. 인터넷 연결 후 다시 눌러주세요.'); return; }
   tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: MOBILE_CONFIG.clientId, scope: 'openid email https://www.googleapis.com/auth/drive.appdata',
+    client_id: MOBILE_CONFIG.clientId, scope: 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.appdata',
     include_granted_scopes: false,
     error_callback: () => message('로그인 창이 닫혔거나 차단됐습니다. 다시 연결하세요.'),
     callback: async r => {
