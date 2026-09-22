@@ -3,10 +3,23 @@ const C = window.MobileSync;
 const $ = id => document.getElementById(id);
 const titles = { todos: '할 일', memos: '메모', progress: '수업 진도', school: '시간표·급식', roster: '학생 명렬', staff: '교직원', contacts: '비상연락망', vehicles: '차량현황' };
 const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+function takePrivateInviteFromUrl() {
+  const params = new URLSearchParams(location.hash.slice(1)), value = params.get('private') || '';
+  if (params.has('private')) history.replaceState(null, '', location.pathname + location.search);
+  if (!value) return '';
+  try { const parsed = VaultCrypto.parseCode(value); parsed.raw.fill(0); return value; }
+  catch { return ''; }
+}
+let privateInvite = demoMode ? '' : takePrivateInviteFromUrl();
 let doc = C.empty(crypto.randomUUID(), 'mobile'), pending = new Set();
 let accessToken = '', expires = 0, subject = '', email = '', ready = false, busy = false, generation = 0;
-let tab = 'todos', editing = null, formDirty = false, tokenClient;
-const privateUI = PrivateMobile.create({ root: $('private-panel'), session: () => ({ subject, token: accessToken, expires }), demo: demoMode });
+let tab = privateInvite ? 'contacts' : 'todos', editing = null, formDirty = false, tokenClient;
+const privateUI = PrivateMobile.create({
+  root: $('private-panel'), session: () => ({ subject, token: accessToken, expires }), demo: demoMode,
+  hasInvite: () => !!privateInvite,
+  takeInvite: () => { const value = privateInvite; privateInvite = ''; return value; }
+});
+setTimeout(() => { privateInvite = ''; }, 5 * 60 * 1000);
 const transport = MobileDrive.create(async () => {
   if (!accessToken || Date.now() >= expires) throw new Error('구글 계정 연결을 눌러 다시 로그인하세요. 작성 내용은 이 탭에 남아 있습니다.');
   return accessToken;

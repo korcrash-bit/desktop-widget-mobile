@@ -5,6 +5,8 @@
 - 실제 교직원·학생·차량 자료는 이 저장소에 포함하지 않습니다.
 - Google OAuth 클라이언트 ID는 공개 식별자이며 Client Secret이나 API 키를 저장하지 않습니다.
 - 개인정보 보관함 자료는 사용자의 Google Drive 앱 전용 영역에 암호문으로 저장됩니다.
+- 개인정보 보관함의 최초 휴대폰 등록은 PC가 표시한 QR로 시작하며, 연결 정보는 주소 기록에서 즉시 제거됩니다.
+- QR을 쓸 수 없을 때만 긴 등록·복구 코드를 직접 입력합니다.
 
 모바일 주소: <https://korcrash-bit.github.io/desktop-widget-mobile/>
 

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   const V = window.VaultCrypto, D = window.VaultDevice;
-  function create({ root, session, demo }) {
+  function create({ root, session, demo, hasInvite = () => false, takeInvite = () => '' }) {
     let kind = 'contacts', data = null, generation = 0, idle, busy = false, activeId = '';
     const el = (tag, text) => { const e = document.createElement(tag); if (text != null) e.textContent = text; return e; };
     const button = (text, fn) => { const b = el('button', text); b.type = 'button'; b.onclick = () => run(fn); return b; };
@@ -21,7 +21,17 @@
     }
     function resetIdle() { clearTimeout(idle); if (data && !demo) idle = setTimeout(lock, 5 * 60 * 1000); }
     function lock() { generation++; data = null; clearTimeout(idle); root.replaceChildren(); if (!root.hidden) draw(); }
-    function show(next) { if (kind === next && !root.hidden && root.childNodes.length) return; kind = next; root.hidden = false; draw(); }
+    function maybeInvite() {
+      if (!hasInvite()) return;
+      if (!session().subject) { note('연결 QR을 받았습니다. 위의 [구글 계정 연결]을 먼저 누르세요.'); return; }
+      if (busy) return;
+      const code = takeInvite();
+      if (code) run(() => openCode(code, true));
+    }
+    function show(next) {
+      const redraw = kind !== next || root.hidden || !root.childNodes.length;
+      kind = next; root.hidden = false; if (redraw) draw(); maybeInvite();
+    }
     function hide() { root.hidden = true; lock(); }
     function guard(run, subject) { if (generation !== run || session().subject !== subject) throw new Error('화면이 잠겼거나 계정이 바뀌어 작업을 중단했습니다.'); }
     async function find(id, subject, run) {
@@ -104,6 +114,7 @@
         query.oninput = renderRows; renderRows(); return;
       }
       root.append(button('기기 인증으로 열기', openRegistered));
+      if (hasInvite()) root.append(el('p', 'PC에서 받은 연결 QR이 준비되었습니다. Google 계정을 연결하면 긴 코드 입력 없이 이 기기를 등록합니다.'));
       const setup = el('details'), summary = el('summary', '처음 등록하거나 기기 인증을 사용할 수 없나요?'); setup.append(summary);
       setup.append(el('p', 'PC의 개인정보 보관함에서 등록·복구 코드를 확인해 아래에 입력하세요. 코드를 아는 사람은 자료를 열 수 있으므로 다른 사람에게 보내지 마세요.'));
       const label = el('label', 'PC 등록·복구 코드'), code = el('input'); code.type = 'password'; code.autocomplete = 'off'; code.spellcheck = false; label.append(code); setup.append(label);
