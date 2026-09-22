@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 const titles = { todos: '할 일', memos: '메모', progress: '수업 진도', school: '시간표·급식', roster: '학생 명렬', contacts: '비상연락망', vehicles: '차량현황' };
 const demoMode = new URLSearchParams(location.search).get('demo') === '1';
 const nativeGoogle = window.NativeBridge?.plugin('NativeGoogle');
+const nativeUpdate = window.NativeBridge?.plugin('NativeUpdate');
 function takePrivateInviteFromUrl() {
   const params = new URLSearchParams(location.hash.slice(1)), value = params.get('private') || '';
   if (params.has('private')) history.replaceState(null, '', location.pathname + location.search);
@@ -35,6 +36,34 @@ const transport = MobileDrive.create(async () => {
 function message(text) { $('status').textContent = text; }
 function element(tag, text, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
 function action(label, fn, cls = 'quiet') { const b = element('button', label, cls); b.type = 'button'; b.onclick = fn; return b; }
+async function checkAppUpdate(manual = false) {
+  if (!nativeUpdate) return;
+  const panel = $('update-panel'), status = $('update-status'), check = $('check-update'), install = $('install-update');
+  panel.hidden = false; check.disabled = true; install.hidden = true;
+  status.textContent = 'GitHub에서 최신 버전을 확인하는 중…';
+  try {
+    const result = await nativeUpdate.check();
+    localStorage.setItem('app-update-last-check', String(Date.now()));
+    $('app-version').textContent = '현재 ' + result.currentVersion;
+    panel.classList.toggle('available', !!result.hasUpdate);
+    if (result.hasUpdate) {
+      status.textContent = `새 버전 ${result.latestVersion}을 설치할 수 있습니다.`;
+      install.hidden = false;
+    } else status.textContent = '최신 버전을 사용하고 있습니다.';
+  } catch (e) {
+    status.textContent = manual ? (e.message || '업데이트를 확인하지 못했습니다.') : '자동 업데이트 확인은 인터넷 연결 시 다시 시도합니다.';
+  } finally { check.disabled = false; }
+}
+async function installAppUpdate() {
+  const button = $('install-update'), status = $('update-status');
+  button.disabled = true; status.textContent = '업데이트 APK를 안전하게 확인하며 내려받는 중…';
+  try {
+    const result = await nativeUpdate.installLatest();
+    if (result.permissionRequired) status.textContent = '열린 설정에서 이 앱의 설치 권한을 허용한 뒤, 돌아와 업데이트 설치를 다시 눌러주세요.';
+    else status.textContent = 'Android 설치 화면에서 업데이트를 확인해 주세요.';
+  } catch (e) { status.textContent = e.message || '업데이트 설치를 시작하지 못했습니다.'; }
+  finally { button.disabled = false; }
+}
 function date() { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date()); }
 $('today').textContent = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date());
 function changed(kind, rows) {
@@ -134,6 +163,8 @@ $('logout').onclick = () => {
   if (nativeGoogle) nativeGoogle.clearToken().catch(() => {});
 };
 $('sync').onclick = synchronize;
+$('check-update').onclick = () => checkAppUpdate(true);
+$('install-update').onclick = installAppUpdate;
 $('search').oninput = render;
 for (const b of $('tabs').children) b.onclick = () => {
   if (formDirty && !confirm('작성 중인 입력을 취소하고 메뉴를 바꿀까요?')) return;
@@ -256,3 +287,10 @@ if (demoMode) {
   $('demo-link').textContent = '실제 계정 연결 화면으로'; $('demo-link').href = './'; synchronize();
 }
 resetForm(); render();
+if (nativeUpdate) {
+  $('update-panel').hidden = false;
+  nativeUpdate.current().then(info => { $('app-version').textContent = '현재 ' + info.currentVersion; }).catch(() => {});
+  const lastUpdateCheck = Number(localStorage.getItem('app-update-last-check') || 0);
+  if (Date.now() - lastUpdateCheck >= 24 * 60 * 60 * 1000) checkAppUpdate(false);
+  else $('update-status').textContent = '최근 24시간 안에 업데이트를 확인했습니다.';
+}

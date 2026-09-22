@@ -28,6 +28,12 @@
       <p id="conflict" role="alert" hidden></p>
       <a id="demo-link" href="?demo=1">연결 없이 예시 화면 먼저 보기</a>
     </section>
+    <section id="update-panel" class="card update-card" hidden>
+      <div class="section-head"><h2>앱 업데이트</h2><span id="app-version"></span></div>
+      <p id="update-status" role="status" aria-live="polite">버전을 확인하는 중…</p>
+      <div class="actions"><button id="install-update" hidden>업데이트 설치</button><button id="check-update" class="secondary">업데이트 확인</button></div>
+      <small>GitHub 공식 릴리스에서 같은 서명으로 확인된 APK만 설치합니다.</small>
+    </section>
     <nav aria-label="수첩 메뉴" id="tabs">
       <button data-tab="todos" aria-pressed="true">할 일</button><button data-tab="memos" aria-pressed="false">메모</button><button data-tab="progress" aria-pressed="false">진도</button><button data-tab="school" aria-pressed="false">시간표·급식</button><button data-tab="roster" aria-pressed="false">명렬</button>
       <button data-tab="contacts" aria-pressed="false">비상연락망</button><button data-tab="vehicles" aria-pressed="false">차량현황</button>
