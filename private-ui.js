@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   const V = window.VaultCrypto, D = window.VaultDevice;
+  const nativeQr = window.NativeBridge?.plugin('NativeQr');
   function create({ root, session, demo, hasInvite = () => false, takeInvite = () => '' }) {
     let kind = 'contacts', data = null, generation = 0, idle, busy = false, activeId = '';
     const el = (tag, text) => { const e = document.createElement(tag); if (text != null) e.textContent = text; return e; };
@@ -56,6 +57,17 @@
         }
         guard(run, s.subject); activeId = parsed.id; data = plain; draw(); resetIdle();
       } finally { parsed.raw.fill(0); }
+    }
+    async function scanCode() {
+      if (!session().subject) throw new Error('먼저 위의 구글 계정 연결을 누르세요.');
+      if (!nativeQr) throw new Error('이 기능은 Android 앱에서 사용할 수 있습니다.');
+      note('PC 설정 화면의 연결 QR을 카메라에 보여 주세요.');
+      const result = await nativeQr.scan();
+      const url = new URL(result.url);
+      const params = new URLSearchParams(url.hash.slice(1));
+      const code = params.get('private');
+      if (!code) throw new Error('바탕화면 위젯의 휴대폰 연결 QR이 아닙니다.');
+      await openCode(code, true);
     }
     async function openRegistered() {
       const run = generation, s = session();
@@ -114,6 +126,7 @@
         query.oninput = renderRows; renderRows(); return;
       }
       root.append(button('기기 인증으로 열기', openRegistered));
+      if (nativeQr) root.append(button('PC 연결 QR 읽기', scanCode));
       if (hasInvite()) root.append(el('p', 'PC에서 받은 연결 QR이 준비되었습니다. Google 계정을 연결하면 긴 코드 입력 없이 이 기기를 등록합니다.'));
       const setup = el('details'), summary = el('summary', '처음 등록하거나 기기 인증을 사용할 수 없나요?'); setup.append(summary);
       setup.append(el('p', 'PC의 개인정보 보관함에서 등록·복구 코드를 확인해 아래에 입력하세요. 코드를 아는 사람은 자료를 열 수 있으므로 다른 사람에게 보내지 마세요.'));

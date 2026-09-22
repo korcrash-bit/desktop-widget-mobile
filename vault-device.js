@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const V = window.VaultCrypto;
+  const nativeVault = window.NativeBridge?.plugin('NativeVault');
   async function db() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open('widget-private-devices-v1', 1);
@@ -47,6 +48,14 @@
     try { return await V.key(bytes); } finally { bytes.fill(0); }
   }
   async function enroll(account, parsed, stillCurrent = () => true) {
+    if (nativeVault) {
+      if (!stillCurrent()) throw new Error('연결 상태가 바뀌어 등록을 중단했습니다.');
+      await nativeVault.enroll({ account, id: parsed.id, keyId: parsed.keyId, secret: V.b64(parsed.raw) });
+      const record = { v: 2, id: parsed.id, keyId: parsed.keyId, native: true, lastSeq: 0 };
+      if (!stillCurrent()) { await nativeVault.forget({ account, id: parsed.id, keyId: parsed.keyId }); throw new Error('연결 상태가 바뀌어 등록을 취소했습니다.'); }
+      await storage(address(account, parsed.id), record);
+      return record;
+    }
     if (!isSecureContext || !window.PublicKeyCredential || !navigator.credentials) throw new Error('HTTPS의 지원 브라우저에서 등록하세요. 이번 탭에서만 코드로 열기도 가능합니다.');
     const challenge = V.random(), salt = V.random();
     const credential = await navigator.credentials.create({ publicKey: {
@@ -68,6 +77,11 @@
     return record;
   }
   async function unlock(account, record) {
+    if (nativeVault && record.native) {
+      const result = await nativeVault.unlock({ account, id: record.id, keyId: record.keyId });
+      const raw = V.bytes(result.secret);
+      try { return await V.key(raw); } finally { raw.fill(0); }
+    }
     const wrapping = await prfFor(record);
     const { secret } = await V.open(wrapping, record.box, purpose(account, record.id, record.keyId));
     const raw = V.bytes(secret);
@@ -76,7 +90,11 @@
   window.VaultDevice = {
     enroll, unlock,
     load: (account, id) => storage(address(account, id)),
-    forget: (account, id) => storage(address(account, id), undefined, true),
+    forget: async (account, id) => {
+      const record = await storage(address(account, id));
+      if (nativeVault && record?.native) await nativeVault.forget({ account, id, keyId: record.keyId });
+      return storage(address(account, id), undefined, true);
+    },
     checkpoint: (account, record, seq) => storage(address(account, record.id), { ...record, lastSeq: seq })
   };
 })();

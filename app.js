@@ -1,8 +1,9 @@
 'use strict';
 const C = window.MobileSync;
 const $ = id => document.getElementById(id);
-const titles = { todos: '할 일', memos: '메모', progress: '수업 진도', school: '시간표·급식', roster: '학생 명렬', staff: '교직원', contacts: '비상연락망', vehicles: '차량현황' };
+const titles = { todos: '할 일', memos: '메모', progress: '수업 진도', school: '시간표·급식', roster: '학생 명렬', contacts: '비상연락망', vehicles: '차량현황' };
 const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+const nativeGoogle = window.NativeBridge?.plugin('NativeGoogle');
 function takePrivateInviteFromUrl() {
   const params = new URLSearchParams(location.hash.slice(1)), value = params.get('private') || '';
   if (params.has('private')) history.replaceState(null, '', location.pathname + location.search);
@@ -20,6 +21,13 @@ const privateUI = PrivateMobile.create({
   takeInvite: () => { const value = privateInvite; privateInvite = ''; return value; }
 });
 setTimeout(() => { privateInvite = ''; }, 5 * 60 * 1000);
+window.Capacitor?.Plugins?.App?.addListener('appUrlOpen', event => {
+  try {
+    const value = new URL(event.url).hash.slice(1), code = new URLSearchParams(value).get('private') || '';
+    const parsed = VaultCrypto.parseCode(code); parsed.raw.fill(0);
+    privateInvite = code; tab = 'contacts'; render();
+  } catch { /* Ignore unrelated or invalid links. */ }
+});
 const transport = MobileDrive.create(async () => {
   if (!accessToken || Date.now() >= expires) throw new Error('구글 계정 연결을 눌러 다시 로그인하세요. 작성 내용은 이 탭에 남아 있습니다.');
   return accessToken;
@@ -68,8 +76,27 @@ async function synchronize() {
     busy = false; $('sync').disabled = !accessToken;
   }
 }
-$('login').onclick = () => {
+async function completeLogin(authRun, token, expiresIn) {
+  const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error('로그인 계정을 확인하지 못했습니다.');
+  const user = await response.json();
+  if (authRun !== generation) return;
+  if (!user.sub) throw new Error('계정 식별 정보가 없습니다.');
+  if (subject && subject !== user.sub) throw new Error('다른 계정으로 바꾸려면 먼저 로그아웃하세요. 작성 내용이 섞이지 않도록 연결을 중단했습니다.');
+  subject = user.sub; email = user.email || ''; accessToken = token; expires = Date.now() + (Number(expiresIn || 3600) - 60) * 1000;
+  $('account').textContent = email; $('logout').hidden = false; $('login').textContent = '구글 계정 다시 연결';
+  await synchronize();
+}
+$('login').onclick = async () => {
   const authRun = generation;
+  if (nativeGoogle) {
+    try {
+      message('Android에서 Google Drive 권한을 확인하는 중…');
+      const r = await nativeGoogle.authorize();
+      await completeLogin(authRun, r.accessToken, r.expiresIn);
+    } catch (e) { message(e.message || 'Google 계정 연결을 완료하지 못했습니다.'); }
+    return;
+  }
   if (!MOBILE_CONFIG.clientId) { message('웹용 구글 로그인 설정이 아직 없습니다. mobile/config.js의 clientId를 설정하세요.'); return; }
   if (!window.google?.accounts?.oauth2) { message('구글 로그인 화면을 불러오지 못했습니다. 인터넷 연결 후 다시 눌러주세요.'); return; }
   tokenClient = google.accounts.oauth2.initTokenClient({
@@ -80,15 +107,7 @@ $('login').onclick = () => {
       if (r.error) { message('로그인을 완료하지 못했습니다: ' + r.error); return; }
       try {
         if (!google.accounts.oauth2.hasGrantedAllScopes(r, 'https://www.googleapis.com/auth/drive.appdata')) throw new Error('앱 전용 Drive 권한에 동의해야 합니다.');
-        const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + r.access_token }, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('로그인 계정을 확인하지 못했습니다.');
-        const user = await response.json();
-        if (authRun !== generation) return;
-        if (!user.sub) throw new Error('계정 식별 정보가 없습니다.');
-        if (subject && subject !== user.sub) throw new Error('다른 계정으로 바꾸려면 먼저 로그아웃하세요. 작성 내용이 섞이지 않도록 연결을 중단했습니다.');
-        subject = user.sub; email = user.email || ''; accessToken = r.access_token; expires = Date.now() + (Number(r.expires_in) - 60) * 1000;
-        $('account').textContent = email; $('logout').hidden = false; $('login').textContent = '구글 계정 다시 연결';
-        await synchronize();
+        await completeLogin(authRun, r.access_token, r.expires_in);
       } catch (e) { message(e.message); }
     }
   });
@@ -101,6 +120,7 @@ $('logout').onclick = () => {
   doc = C.empty(crypto.randomUUID(), 'mobile'); pending.clear(); resetForm();
   $('account').textContent = 'PC에서 쓰는 구글 계정으로 연결하세요.'; $('logout').hidden = true; $('sync').disabled = true;
   $('conflict').hidden = true; $('login').textContent = '구글 계정 연결'; message('이 탭의 자료와 토큰을 지웠습니다.'); render();
+  if (nativeGoogle) nativeGoogle.clearToken().catch(() => {});
 };
 $('sync').onclick = synchronize;
 $('search').oninput = render;
@@ -148,7 +168,7 @@ function render() {
   document.querySelector('.workspace').hidden = isPrivate;
   if (isPrivate) { privateUI.show(tab); return; }
   privateUI.hide();
-  $('search-label').hidden = !ready || !['roster', 'staff'].includes(tab);
+  $('search-label').hidden = !ready || tab !== 'roster';
   $('editor').hidden = !ready || !C.EDITABLE.includes(tab);
   $('content').replaceChildren(); $('count').textContent = '';
   $('hint').textContent = demoMode ? '연습용 예시 자료입니다. 자유롭게 둘러보세요.' : C.EDITABLE.includes(tab) ? '변경 내용은 PC가 켜져 있을 때 위젯에도 반영됩니다.' : 'PC에서 마지막으로 보낸 자료 · 조회 전용';
@@ -156,9 +176,10 @@ function render() {
   if (tab === 'school') { renderSchool(); return; }
   const query = $('search').value.trim().toLowerCase();
   let rows = C.EDITABLE.includes(tab) ? C.rows(doc, tab) : doc.snapshot?.data[tab] || [];
+  if (tab === 'todos') rows = C.sortTodos(rows);
   if (tab === 'progress') rows.sort((a, b) => b.date.localeCompare(a.date));
   if (query) rows = rows.filter(r => Object.values(r).join(' ').toLowerCase().includes(query));
-  $('count').textContent = rows.length + (['roster', 'staff'].includes(tab) ? '명' : '개');
+  $('count').textContent = rows.length + (tab === 'roster' ? '명' : '개');
   if (!rows.length) $('content').append(element('p', query ? '검색 결과가 없습니다.' : '아직 등록된 항목이 없습니다.', 'empty'));
   for (const row of rows) {
     const item = element('article', null, 'item'), head = element('div', null, 'item-head');
@@ -170,7 +191,6 @@ function render() {
     let title = row.text, detail = row.cat || '';
     if (tab === 'progress') { title = row.body || '(메모만 기록)'; detail = `${row.date} · ${row.subject} · ${row.klass}\n${row.memo || ''}`; }
     if (tab === 'roster') { title = row.name; detail = `${row.cls} · ${row.no}번`; }
-    if (tab === 'staff') { title = row.name; detail = row.dept; }
     const text = element('div', title, 'item-text' + (row.done ? ' done' : '')); if (detail) text.append(element('small', detail));
     head.append(text); item.append(head);
     if (C.EDITABLE.includes(tab)) {
@@ -216,7 +236,6 @@ if (demoMode) {
   C.capture(example, 'progress', [{ date: date(), subject: '국어', klass: '1-1', body: '인물의 관점 비교하기', memo: '다음 시간 모둠 발표' }], 1);
   example.snapshot = { at: Date.now(), data: {
     roster: [{ cls: '1-1', no: 1, name: '예시 학생 가' }, { cls: '1-1', no: 2, name: '예시 학생 나' }],
-    staff: [{ name: '예시 교사 가', dept: '1학년부' }, { name: '예시 교사 나', dept: '교무부' }],
     timetable: { at: Date.now(), schoolName: '예시 학교', cells: { '1-1': { subject: '국어', klass: '1-1' }, '2-2': { subject: '국어', klass: '1-2' }, '3-3': { subject: '독서', klass: '2-1' } } },
     meal: { at: Date.now(), ymd: date().replaceAll('-', ''), meals: [{ nm: '예시 중식', items: ['쌀밥', '미역국', '두부조림', '배추김치'], kcal: '' }] }
   } };

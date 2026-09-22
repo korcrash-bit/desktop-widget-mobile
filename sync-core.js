@@ -9,7 +9,7 @@
   const FIELDS = {
     todos: ['id', 'text', 'cat', 'done', 'date', 'time', 'when'],
     memos: ['id', 'text'], progress: ['date', 'subject', 'klass', 'body', 'memo'],
-    roster: ['cls', 'no', 'name'], staff: ['name', 'dept']
+    roster: ['cls', 'no', 'name']
   };
   const clone = x => JSON.parse(JSON.stringify(x));
   const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -47,6 +47,23 @@
   const saw = (a, b) => a.parent === rev(b) || Object.hasOwn(a.seen || {}, b.writer) && a.seen[b.writer] >= b.at;
   function entries(doc, kind) { return doc.records[kind] || {}; }
   function rows(doc, kind) { return Object.values(entries(doc, kind)).filter(e => !e.deleted).map(e => clone(e.value)); }
+  function sortTodos(input) {
+    const dated = /^\d{4}-\d{2}-\d{2}$/, timed = /^\d{2}:\d{2}$/;
+    return input.map((row, index) => ({ row, index })).sort((a, b) => {
+      const done = Number(!!a.row.done) - Number(!!b.row.done);
+      if (done) return done;
+      if (a.row.done) return a.index - b.index;
+      const ad = dated.test(a.row.date || '') ? a.row.date : '';
+      const bd = dated.test(b.row.date || '') ? b.row.date : '';
+      if (!ad && bd) return -1;
+      if (ad && !bd) return 1;
+      if (ad !== bd) return ad.localeCompare(bd);
+      const at = timed.test(a.row.time || '') ? a.row.time : '';
+      const bt = timed.test(b.row.time || '') ? b.row.time : '';
+      if (at !== bt) return (at || '99:99').localeCompare(bt || '99:99');
+      return a.index - b.index;
+    }).map(x => x.row);
+  }
   function capture(doc, kind, next, at = Date.now()) {
     const prior = entries(doc, kind), map = new Map(next.map(r => { const v = clean(kind, r); return [key(kind, v), v]; }));
     const out = new Map(Object.entries(prior)), changed = [];
@@ -82,7 +99,6 @@
       if (!Number.isSafeInteger(s.at) || !s.data) throw new Error('조회 데이터가 손상됐습니다.');
       doc.snapshot = { at: s.at, data: {
         roster: (s.data.roster || []).map(r => clean('roster', r)),
-        staff: (s.data.staff || []).map(r => clean('staff', r)),
         timetable: sanitizeTimetable(s.data.timetable), meal: sanitizeMeal(s.data.meal)
       } };
     }
@@ -112,7 +128,7 @@
         }
         result.records[kind] = Object.fromEntries(map);
       }
-      // Mobile files cannot provide roster/staff or school snapshots.
+      // Mobile files cannot provide roster or school snapshots.
       if (remote.snapshot && (!result.snapshot || remote.snapshot.at > result.snapshot.at)) result.snapshot = remote.snapshot;
     }
     return { doc: result, conflicts: [...new Set(conflicts)] };
@@ -122,5 +138,5 @@
     if (out.role === 'mobile') out.snapshot = null;
     return out;
   }
-  return { EDITABLE, clean, key, empty, rows, capture, merge, validate, payload, equal, rev, sanitizeMeal, sanitizeTimetable };
+  return { EDITABLE, clean, key, empty, rows, sortTodos, capture, merge, validate, payload, equal, rev, sanitizeMeal, sanitizeTimetable };
 });

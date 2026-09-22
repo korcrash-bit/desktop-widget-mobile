@@ -1,13 +1,10 @@
-# 바탕화면 위젯 휴대폰 동반 페이지
+# 나의 교무수첩 모바일
 
-바탕화면 위젯의 모바일 화면 코드만 배포하는 GitHub Pages 저장소입니다.
+바탕화면 위젯의 모바일 동반 페이지입니다. 일반 자료는 Google Drive 앱 전용 공간에서 동기화하고,
+교직원 비상연락망과 차량현황은 별도 암호화 보관함에서만 조회합니다.
 
-- 실제 교직원·학생·차량 자료는 이 저장소에 포함하지 않습니다.
-- Google OAuth 클라이언트 ID는 공개 식별자이며 Client Secret이나 API 키를 저장하지 않습니다.
-- 개인정보 보관함 자료는 사용자의 Google Drive 앱 전용 영역에 암호문으로 저장됩니다.
-- 개인정보 보관함의 최초 휴대폰 등록은 PC가 표시한 QR로 시작하며, 연결 정보는 주소 기록에서 즉시 제거됩니다.
-- QR을 쓸 수 없을 때만 긴 등록·복구 코드를 직접 입력합니다.
+- 실제 주소: https://korcrash-bit.github.io/desktop-widget-mobile/
+- 예시 화면: https://korcrash-bit.github.io/desktop-widget-mobile/?demo=1
+- Android APK에서는 Google 시스템 인증, 기기 잠금 인증, PC 연결 QR 스캔을 사용합니다.
 
-모바일 주소: <https://korcrash-bit.github.io/desktop-widget-mobile/>
-
-웹용 OAuth 클라이언트 ID와 승인된 GitHub Pages 원본이 설정되어 있습니다.
+실제 학교 자료, OAuth 토큰, Client Secret은 이 저장소에 포함하지 않습니다.

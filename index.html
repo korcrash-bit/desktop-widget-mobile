@@ -9,6 +9,7 @@
   <title>나의 교무수첩 · 바탕화면 위젯</title>
   <link rel="stylesheet" href="app.css">
   <script src="config.js" defer></script>
+  <script src="native-bridge.js" defer></script>
   <script src="sync-core.js" defer></script>
   <script src="drive.js" defer></script>
   <script src="vault-crypto.js" defer></script>
@@ -28,7 +29,7 @@
       <a id="demo-link" href="?demo=1">연결 없이 예시 화면 먼저 보기</a>
     </section>
     <nav aria-label="수첩 메뉴" id="tabs">
-      <button data-tab="todos" aria-pressed="true">할 일</button><button data-tab="memos" aria-pressed="false">메모</button><button data-tab="progress" aria-pressed="false">진도</button><button data-tab="school" aria-pressed="false">시간표·급식</button><button data-tab="roster" aria-pressed="false">명렬</button><button data-tab="staff" aria-pressed="false">교직원</button>
+      <button data-tab="todos" aria-pressed="true">할 일</button><button data-tab="memos" aria-pressed="false">메모</button><button data-tab="progress" aria-pressed="false">진도</button><button data-tab="school" aria-pressed="false">시간표·급식</button><button data-tab="roster" aria-pressed="false">명렬</button>
       <button data-tab="contacts" aria-pressed="false">비상연락망</button><button data-tab="vehicles" aria-pressed="false">차량현황</button>
     </nav>
     <section class="card workspace"><div class="section-head"><h2 id="heading">할 일</h2><span id="count"></span></div>
@@ -41,7 +42,7 @@
       </form>
     </section>
     <section id="private-panel" class="card" hidden></section>
-    <footer>명렬·교직원 정보는 조회 전용입니다.<br>창을 닫으면 조회 자료와 로그인 토큰이 지워집니다.<br>기기 인증으로 암호화한 등록 정보는 이 브라우저에 남습니다.<br>오프라인 편집은 이 탭이 열린 동안만 보관됩니다.</footer>
+    <footer>학생 명렬은 조회 전용입니다.<br>교직원 정보는 암호화된 비상연락망에서 조회합니다.<br>창을 닫으면 일반 조회 자료와 로그인 토큰이 지워집니다.<br>기기 인증으로 암호화한 등록 정보는 이 브라우저에 남습니다.<br>오프라인 편집은 이 탭이 열린 동안만 보관됩니다.</footer>
   </main>
 </body>
 </html>
