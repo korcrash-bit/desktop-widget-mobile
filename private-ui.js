@@ -20,7 +20,7 @@
       catch (e) { note(e.name === 'NotAllowedError' ? '기기 인증이 취소됐거나 지원되지 않습니다. 등록·복구 코드로 이번 탭에서만 열 수도 있습니다.' : e.message); }
       finally { busy = false; root.querySelectorAll('button').forEach(b => b.disabled = false); }
     }
-    function resetIdle() { clearTimeout(idle); if (data && !demo) idle = setTimeout(lock, 5 * 60 * 1000); }
+    function resetIdle() { clearTimeout(idle); if (data && !demo && !nativeQr) idle = setTimeout(lock, 5 * 60 * 1000); }
     function lock() { generation++; data = null; clearTimeout(idle); root.replaceChildren(); if (!root.hidden) draw(); }
     function maybeInvite() {
       if (!hasInvite()) return;
@@ -32,8 +32,9 @@
     function show(next) {
       const redraw = kind !== next || root.hidden || !root.childNodes.length;
       kind = next; root.hidden = false; if (redraw) draw(); maybeInvite();
+      if (nativeQr && !data && !demo && session().subject && !hasInvite() && !busy) run(openRegistered);
     }
-    function hide() { root.hidden = true; lock(); }
+    function hide() { root.hidden = true; if (!nativeQr) lock(); }
     function guard(run, subject) { if (generation !== run || session().subject !== subject) throw new Error('화면이 잠겼거나 계정이 바뀌어 작업을 중단했습니다.'); }
     async function find(id, subject, run) {
       const files = await transport.readAll(); guard(run, subject);
@@ -104,11 +105,11 @@
         const table = data[kind];
         if (!demo) {
           const actions = el('div'); actions.className = 'actions';
-          actions.append(button('지금 잠그기', async () => lock()), button('새로 조회·재인증', async () => { lock(); await openRegistered(); }), button('이 브라우저 등록 해제', async () => {
+          actions.append(button('지금 닫기', async () => lock()), button('최신 자료 다시 불러오기', async () => { lock(); await openRegistered(); }), button(nativeQr ? '이 앱 등록 해제' : '이 브라우저 등록 해제', async () => {
             const account = session().subject;
             await D.forget(account, activeId); lock(); note('이 브라우저의 등록 정보를 지웠습니다.');
           })); root.append(actions);
-          note('5분 동안 조작이 없거나 다른 화면으로 전환하면 잠깁니다.');
+          note(nativeQr ? '최초 등록 인증이 완료된 이 휴대폰에서는 추가 인증 없이 조회합니다.' : '5분 동안 조작이 없거나 다른 화면으로 전환하면 잠깁니다.');
         }
         if (!table) { root.append(el('p', 'PC에서 이 자료를 먼저 등록하고 Drive로 보내세요.')); return; }
         if (table.updatedAt) root.append(el('small', 'PC 등록 시각 · ' + new Date(table.updatedAt).toLocaleString('ko-KR')));
@@ -125,7 +126,7 @@
         };
         query.oninput = renderRows; renderRows(); return;
       }
-      root.append(button('기기 인증으로 열기', openRegistered));
+      root.append(button(nativeQr ? '등록된 자료 열기' : '기기 인증으로 열기', openRegistered));
       if (nativeQr) root.append(button('PC 연결 QR 읽기', scanCode));
       if (hasInvite()) root.append(el('p', 'PC에서 받은 연결 QR이 준비되었습니다. Google 계정을 연결하면 긴 코드 입력 없이 이 기기를 등록합니다.'));
       const setup = el('details'), summary = el('summary', '처음 등록하거나 기기 인증을 사용할 수 없나요?'); setup.append(summary);
@@ -136,8 +137,8 @@
         button('이번 탭에서만 열기', async () => { const value = code.value; code.value = ''; await openCode(value, false); }));
       setup.append(actions); root.append(setup);
     }
-    document.addEventListener('visibilitychange', () => { if (document.hidden) lock(); });
-    window.addEventListener('pagehide', lock);
+    document.addEventListener('visibilitychange', () => { if (document.hidden && !nativeQr) lock(); });
+    window.addEventListener('pagehide', () => { if (!nativeQr) lock(); });
     root.addEventListener('pointerdown', resetIdle); root.addEventListener('input', resetIdle);
     return { show, hide, lock };
   }
