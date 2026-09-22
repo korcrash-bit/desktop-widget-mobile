@@ -8,4 +8,4 @@
 
 모바일 주소: <https://korcrash-bit.github.io/desktop-widget-mobile/>
 
-현재 `config.js`의 웹용 OAuth 클라이언트 ID는 비어 있으므로 예시 화면만 사용할 수 있습니다.
+웹용 OAuth 클라이언트 ID와 승인된 GitHub Pages 원본이 설정되어 있습니다.
