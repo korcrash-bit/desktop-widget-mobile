@@ -16,6 +16,7 @@ let privateInvite = demoMode ? '' : takePrivateInviteFromUrl();
 let doc = C.empty(crypto.randomUUID(), 'mobile'), pending = new Set();
 let accessToken = '', expires = 0, subject = '', email = '', ready = false, busy = false, generation = 0;
 let tab = privateInvite ? 'contacts' : 'todos', editing = null, formDirty = false, tokenClient;
+let editingBase = '';
 const privateUI = PrivateMobile.create({
   root: $('private-panel'), session: () => ({ subject, token: accessToken, expires }), demo: demoMode,
   hasInvite: () => !!privateInvite,
@@ -84,10 +85,13 @@ async function synchronize() {
     const valid = files.map(f => C.validate(f.doc));
     if (!valid.some(d => d.role === 'desktop' && d.snapshot)) throw new Error('PC에서 모바일 동기화를 먼저 켜고, 같은 계정인지 확인하세요.');
     const result = C.merge(doc, valid, pending);
+    for (const [k, entry] of Object.entries(result.doc.records.memos || {})) {
+      if (!C.equal(doc.records.memos?.[k], entry)) pending.add('memos:' + k);
+    }
     doc = result.doc; ready = true;
     if (result.conflicts.length) {
       $('conflict').hidden = false;
-      $('conflict').textContent = '같은 항목이 다른 기기에서도 수정되어 최신 저장을 적용했습니다: ' + result.conflicts.map(k => titles[k]).join(', ');
+      $('conflict').textContent = '다른 기기에서도 수정된 항목이 있습니다. 메모는 동시 수정·복구 사본으로 보존했습니다: ' + result.conflicts.map(k => titles[k]).join(', ');
     }
     if (pending.size) {
       const uploaded = C.payload(doc);
@@ -179,6 +183,7 @@ function field(name, label, value = '', type = 'text') {
 }
 function resetForm(row = null) {
   editing = row ? C.key(tab, row) : null; formDirty = false; $('fields').replaceChildren();
+  editingBase = row?.text || '';
   $('editor-title').textContent = row ? '항목 수정' : '새 항목';
   if (tab === 'todos') { field('text', '할 일', row?.text); field('cat', '분류', row?.cat || '업무'); }
   if (tab === 'memos') field('text', '메모 내용', row?.text, 'textarea');
@@ -195,8 +200,10 @@ $('editor').onsubmit = e => {
   const values = Object.fromEntries(new FormData($('editor')));
   for (const k of Object.keys(values)) values[k] = values[k].trim();
   const rows = C.rows(doc, tab), prior = rows.find(r => C.key(tab, r) === editing);
-  if (editing && !prior) { message('다른 기기에서 삭제된 항목입니다. 입력 취소 후 새로 작성하세요.'); return; }
-  const row = { ...(prior || (tab === 'progress' ? {} : { id: crypto.randomUUID(), ...(tab === 'todos' ? { done: false } : {}) })), ...values };
+  if (editing && !prior && tab !== 'memos') { message('다른 기기에서 삭제된 항목입니다. 입력 취소 후 새로 작성하세요.'); return; }
+  const staleMemo = tab === 'memos' && editing && (!prior || prior.text !== editingBase);
+  const row = { ...(prior || (tab === 'progress' ? {} : { id: crypto.randomUUID(), ...(tab === 'todos' ? { done: false } : {}) })), ...values,
+    ...(staleMemo ? { id: crypto.randomUUID(), conflictOf: editing, conflictType: prior ? 'conflict' : 'recovery' } : {}) };
   if (tab === 'progress' && !row.body && !row.memo) { message('진도 내용이나 메모를 입력하세요.'); return; }
   const k = C.key(tab, row), i = rows.findIndex(r => C.key(tab, r) === k);
   if (!editing && i >= 0 && !confirm('같은 날짜·과목·반의 진도가 있습니다. 덮어쓸까요?')) return;
@@ -231,6 +238,7 @@ function render() {
       head.append(check);
     }
     let title = row.text, detail = row.cat || '';
+    if (tab === 'memos' && row.conflictType) detail = row.conflictType === 'recovery' ? '복구 사본 · 삭제와 수정이 겹쳐 보존했습니다.' : '동시 수정 사본 · 다른 기기의 내용도 보존했습니다.';
     if (tab === 'progress') { title = row.body || '(메모만 기록)'; detail = `${row.date} · ${row.subject} · ${row.klass}\n${row.memo || ''}`; }
     if (tab === 'roster') { title = row.name; detail = `${row.cls} · ${row.no}번`; }
     const text = element('div', title, 'item-text' + (row.done ? ' done' : '')); if (detail) text.append(element('small', detail));

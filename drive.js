@@ -16,7 +16,7 @@
         const error = new Error(r.status === 401 ? '로그인이 만료됐습니다. 다시 연결하세요.' : r.status === 403 ? '앱 전용 Drive 권한이 필요합니다. 구글 계정을 다시 연결하세요.' : `동기화 통신 실패 (${r.status})`);
         error.status = r.status; throw error;
       }
-      return r.json();
+      return r.status === 204 ? {} : r.json();
     }
     async function readAll() {
       const files = []; let pageToken = '';
@@ -39,7 +39,11 @@
       const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(doc)}\r\n--${boundary}--`;
       return call(UPLOAD + '?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
     }
-    return { readAll, write };
+    async function remove(id) {
+      if (!id || typeof id !== 'string') throw new Error('삭제할 Drive 파일을 확인하세요.');
+      return call(`${API}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    }
+    return { readAll, write, remove };
   }
   return { create, PREFIX };
 });

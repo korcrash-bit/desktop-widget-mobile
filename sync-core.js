@@ -8,7 +8,7 @@
   const EDITABLE = ['todos', 'memos', 'progress'];
   const FIELDS = {
     todos: ['id', 'text', 'cat', 'done', 'date', 'time', 'when'],
-    memos: ['id', 'text'], progress: ['date', 'subject', 'klass', 'body', 'memo'],
+    memos: ['id', 'text', 'conflictOf', 'conflictType'], progress: ['date', 'subject', 'klass', 'body', 'memo'],
     roster: ['cls', 'no', 'name']
   };
   const clone = x => JSON.parse(JSON.stringify(x));
@@ -20,6 +20,7 @@
       if (row[field] == null) continue;
       if (field === 'done') out[field] = !!row[field];
       else if (field === 'id' && typeof row[field] === 'number') out[field] = row[field];
+      else if (kind === 'memos' && field === 'text') out[field] = String(row[field]);
       else out[field] = String(row[field]).slice(0, 20000);
     }
     if (EDITABLE.includes(kind)) key(kind, out);
@@ -124,6 +125,7 @@
           const l = map.get(k);
           if (l && rev(l) !== rev(r) && l.at > 1 && r.at > 1 && !saw(r, l) && !saw(l, r) && !equal(l.value, r.value)) conflicts.push(kind);
           if (!l) map.set(k, r);
+          else if (kind === 'memos') mergeMemo(map, k, l, r, conflicts);
           else map.set(k, { ...(compare(r, l) > 0 ? r : l), seen: history(l, r) });
         }
         result.records[kind] = Object.fromEntries(map);
@@ -133,10 +135,54 @@
     }
     return { doc: result, conflicts: [...new Set(conflicts)] };
   }
+  // A stable copy ID makes retrying or receiving the same conflict idempotent.
+  function memoFingerprint(text) {
+    const words = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
+    for (let i = 0; i < text.length; i++) for (let j = 0; j < words.length; j++) {
+      words[j] = Math.imul(words[j] ^ text.charCodeAt(i), [16777619, 2246822519, 3266489917, 668265263][j]);
+      words[j] ^= words[j] >>> 13;
+    }
+    return words.map(w => (w >>> 0).toString(16).padStart(8, '0')).join('');
+  }
+  function memoCopy(k, entry, type) {
+    const id = 'memo-copy:' + memoFingerprint(JSON.stringify([k, entry.at, entry.writer]));
+    return { ...clone(entry), parent: '', seen: {}, deleted: false,
+      value: { ...entry.value, id, conflictOf: k, conflictType: type } };
+  }
+  function mergeMemo(map, k, l, r, conflicts) {
+    const ls = saw(l, r), rs = saw(r, l);
+    const concurrent = rev(l) !== rev(r) && !ls && !rs;
+    let winner = rs && !ls ? r : ls && !rs ? l : compare(r, l) > 0 ? r : l;
+    if (concurrent && (l.deleted !== r.deleted || !equal(l.value, r.value))) {
+      conflicts.push('memos');
+      // Honor the deletion, but keep the concurrent edit as a visible recovery copy.
+      if (l.deleted !== r.deleted) winner = l.deleted ? l : r;
+      const other = winner === l ? r : l;
+      if (!other.deleted) {
+        const copy = memoCopy(k, other, winner.deleted ? 'recovery' : 'conflict');
+        const id = String(copy.value.id), prior = map.get(id);
+        if (!prior) map.set(id, copy);
+        else mergeMemo(map, id, prior, copy, conflicts);
+      }
+    }
+    map.set(k, { ...winner, seen: history(l, r) });
+  }
+  // Import an old whole-list snapshot without interpreting absent rows as deletions.
+  // The caller runs this only once per PC; later old-client snapshots cannot resurrect rows.
+  function importMemos(doc, input) {
+    const imported = empty('legacy-import', 'desktop'), records = new Map();
+    for (const row of input) {
+      const value = clean('memos', row), k = key('memos', value);
+      if (entries(doc, 'memos')[k]?.deleted) continue;
+      records.set(k, { at: 1, writer: 'legacy:' + memoFingerprint(JSON.stringify(value)), parent: '', seen: {}, deleted: false, value });
+    }
+    imported.records.memos = Object.fromEntries(records);
+    return merge(doc, [imported]).doc;
+  }
   function payload(doc) {
     const out = clone(doc);
     if (out.role === 'mobile') out.snapshot = null;
     return out;
   }
-  return { EDITABLE, clean, key, empty, rows, sortTodos, capture, merge, validate, payload, equal, rev, sanitizeMeal, sanitizeTimetable };
+  return { EDITABLE, clean, key, empty, rows, sortTodos, capture, merge, validate, payload, equal, rev, sanitizeMeal, sanitizeTimetable, importMemos };
 });

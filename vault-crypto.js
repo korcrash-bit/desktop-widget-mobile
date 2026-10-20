@@ -46,6 +46,16 @@
         return r.map(v => String(v ?? '').slice(0, 2000));
       }), updatedAt: Number(t.updatedAt) || 0 };
     }
+    if (data?._revisions && typeof data._revisions === 'object') {
+      out._revisions = {};
+      for (const kind of ['contacts', 'vehicles']) {
+        const r = data._revisions[kind];
+        if (!r) continue;
+        const at = Number(r.at), writer = String(r.writer || '');
+        if (!Number.isSafeInteger(at) || at < 1 || !uuid.test(writer)) throw new Error('보관함 변경 기록이 올바르지 않습니다.');
+        out._revisions[kind] = { at, writer, deleted: !!r.deleted };
+      }
+    }
     return out;
   }
   function code(id, keyId, raw) { return `D1.${id}.${keyId}.${b64(raw)}`; }
