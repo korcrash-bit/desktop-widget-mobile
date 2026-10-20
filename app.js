@@ -242,6 +242,7 @@ function render() {
     if (tab === 'progress') { title = row.body || '(메모만 기록)'; detail = `${row.date} · ${row.subject} · ${row.klass}\n${row.memo || ''}`; }
     if (tab === 'roster') { title = row.name; detail = `${row.cls} · ${row.no}번`; }
     const text = element('div', title, 'item-text' + (row.done ? ' done' : '')); if (detail) text.append(element('small', detail));
+    if (tab === 'todos') text.append(element('small', C.todoSchedule(row), 'todo-schedule'));
     head.append(text); item.append(head);
     if (C.EDITABLE.includes(tab)) {
       const actions = element('div', null, 'actions');

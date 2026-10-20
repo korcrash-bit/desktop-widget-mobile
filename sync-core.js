@@ -48,6 +48,17 @@
   const saw = (a, b) => a.parent === rev(b) || Object.hasOwn(a.seen || {}, b.writer) && a.seen[b.writer] >= b.at;
   function entries(doc, kind) { return doc.records[kind] || {}; }
   function rows(doc, kind) { return Object.values(entries(doc, kind)).filter(e => !e.deleted).map(e => clone(e.value)); }
+  function todoSchedule(row) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(row.date || '');
+    if (!match) return '날짜 미지정';
+    const [, y, m, d] = match.map(Number), date = new Date(0);
+    date.setUTCFullYear(y, m - 1, d);
+    if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return '날짜 미지정';
+    const day = ['일', '월', '화', '수', '목', '금', '토'][date.getUTCDay()];
+    const time = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(row.time || '');
+    const clock = time ? `${Number(time[1]) < 12 ? '오전' : '오후'} ${Number(time[1]) % 12 || 12}:${time[2]}` : '시간 미지정';
+    return `${row.when === 'start' ? '시작' : '마감'} · ${y}년 ${m}월 ${d}일(${day}) · ${clock}`;
+  }
   function sortTodos(input) {
     const dated = /^\d{4}-\d{2}-\d{2}$/, timed = /^\d{2}:\d{2}$/;
     return input.map((row, index) => ({ row, index })).sort((a, b) => {
@@ -184,5 +195,5 @@
     if (out.role === 'mobile') out.snapshot = null;
     return out;
   }
-  return { EDITABLE, clean, key, empty, rows, sortTodos, capture, merge, validate, payload, equal, rev, sanitizeMeal, sanitizeTimetable, importMemos };
+  return { EDITABLE, clean, key, empty, rows, sortTodos, todoSchedule, capture, merge, validate, payload, equal, rev, sanitizeMeal, sanitizeTimetable, importMemos };
 });
